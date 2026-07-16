@@ -45,7 +45,7 @@ platform.machine()
 git clone https://github.com/RAGE-toolkit/Artic-nf.git
 cd Artic-nf
 conda env create --file environment.yml
-conda activate artic-nf
+conda activate rabv-artic-nf
 ```
 
 ### 🧠 Dorado Basecaller Setup
@@ -161,7 +161,7 @@ Download Docker Desktop from https://www.docker.com/products/docker-desktop/, th
 git clone https://github.com/RAGE-toolkit/Artic-nf.git
 cd Artic-nf
 conda env create --file environment.yml
-conda activate artic-nf
+conda activate rabv-artic-nf
 ```
 
 #### Running the test data
