@@ -41,8 +41,8 @@ process MINIMAP2 {
 	${params.primer_schema}/${scheme}/${version}/${scheme}.reference.fasta \
 	${currDir}/raw_files/fastq/${sampleId}_${item}.fastq |\
 	samtools view -bS -F 4 - |\
-	samtools sort -o ${currDir}/results/medaka/${params.run_name}_${sampleId}.sorted.bam &&\
-	samtools index ${currDir}/results/medaka/${params.run_name}_${sampleId}.sorted.bam
+	samtools sort -o ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.sorted.bam &&\
+	samtools index ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.sorted.bam
 	"""
 	}
 
