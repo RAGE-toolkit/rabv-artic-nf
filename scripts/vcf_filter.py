@@ -68,6 +68,20 @@ class MedakaFilter:
 
 def go(args):
     vcf_reader = VCF(args.inputvcf)
+
+    variants = list(vcf_reader)
+
+    # Some callers (e.g. longshot) write VCFs with no ##contig header line.
+    # Without one, cyvcf2/htslib silently drops every record written through
+    # a Writer built from this header (fails with "CONTIG id=0 not present
+    # in the header" on stderr, no Python exception) - so register any CHROM
+    # seen in the data before creating the writers.
+    seen_chroms = set()
+    for v in variants:
+        if v.CHROM not in seen_chroms:
+            seen_chroms.add(v.CHROM)
+            vcf_reader.add_to_header(f'##contig=<ID={v.CHROM}>')
+
     vcf_writer = Writer(args.output_pass_vcf, vcf_reader)
     vcf_writer_filtered = Writer(args.output_fail_vcf, vcf_reader)
 
@@ -78,8 +92,6 @@ def go(args):
     else:
         print("Please specify a VCF type, i.e. --nanopolish or --medaka\n")
         raise SystemExit
-
-    variants = list(vcf_reader)
 
     group_variants = defaultdict(list)
     for v in variants:

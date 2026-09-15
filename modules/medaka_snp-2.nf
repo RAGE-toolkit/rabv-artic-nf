@@ -46,6 +46,13 @@ process MEDAKA_SNP_2 {
 	(
 		medaka snp ${params.primer_schema}/${scheme}/${version}/${scheme}.reference.fasta \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.hdf \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.vcf && \
+		medaka tools annotate --pad 25 --RG 2 \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.vcf \
+		${params.primer_schema}/${scheme}/${version}/${scheme}.reference.fasta \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.trimmed.rg.sorted.bam \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.annotate.tmp.vcf && \
+		mv ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.annotate.tmp.vcf \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.vcf ) || echo "medaka-snp-2" "${sampleId}" >> ${currDir}/${params.output_dir}/medaka/failed_samples.txt
 	"""
 	}

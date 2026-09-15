@@ -43,7 +43,7 @@ process VCF_FILTER {
 	(
 		python ${vcf_filter} \
 		--medaka \
-		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.vcf \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.longshot.vcf \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.pass.vcf \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.fail.vcf \
 		&& bgzip -f ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.pass.vcf \
