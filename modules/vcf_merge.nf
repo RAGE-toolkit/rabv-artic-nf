@@ -41,10 +41,11 @@ process VCF_MERGE {
 	"""
 	set -e
 	(
-		python "${vcf_merge}" "${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}" \
+		/opt/miniforge/envs/clair3env/bin/python3 "${vcf_merge}" "${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}" \
 		"${params.primer_schema}/${scheme}/${version}/${scheme}.scheme.bed" \
 		"2:${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.2.vcf" \
 		"1:${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.1.vcf" \
+		"unmatched:${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.unmatched.vcf" \
 		2> "${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.primersitereport.txt" && \
 		bgzip -f "${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.vcf" && \
 		tabix -f -p vcf "${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.vcf.gz" ) || echo "vcf_merge" "${sampleId}" >> ${currDir}/${params.output_dir}/medaka/failed_samples.txt

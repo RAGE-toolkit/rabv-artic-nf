@@ -41,12 +41,10 @@ process VCF_FILTER {
 	"""
 	set -e
 	(
-		python ${vcf_filter} \
-		--medaka \
-		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.longshot.vcf \
+		python ${vcf_filter} --min-depth ${params.mask_depth} --min-variant-quality ${params.min_variant_quality} --min-allele-frequency ${params.min_allele_frequency} --min-mask-allele-frequency ${params.min_mask_allele_frequency} --min-frameshift-quality ${params.min_frameshift_quality} --min-minor-allele-count ${params.min_minor_allele_count} \
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.merged.vcf.gz \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.pass.vcf \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.fail.vcf \
-		&& bgzip -f ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.pass.vcf \
-		&& tabix -p vcf ${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.pass.vcf.gz ) || echo "vcf_filter" "${sampleId}" >> ${currDir}/${params.output_dir}/medaka/failed_samples.txt
+		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.ignore.vcf ) || echo "vcf_filter" "${sampleId}" >> ${currDir}/${params.output_dir}/medaka/failed_samples.txt
 	"""
 	}

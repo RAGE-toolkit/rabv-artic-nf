@@ -1,72 +1,102 @@
-from cyvcf2 import VCF, Writer
+#source https://github.com/artic-network/fieldbioinformatics/blob/master/artic/vcf_merge.py
+
+import pysam
 import sys
 from collections import defaultdict
-from vcftagprimersites import read_bed_file
+
+from primalbedtools.scheme import Scheme
+from primalbedtools.bedfiles import merge_primers
+
+
+def _has_variants(fn):
+    with pysam.VariantFile(fn) as vcf:
+        return next(iter(vcf), None) is not None
 
 
 def vcf_merge(args):
-    # Load BED file
-    bed = read_bed_file(args.bedfile)
+
+    try:
+        scheme = Scheme.from_file(args.bedfile)
+        scheme.bedlines = merge_primers(scheme.bedlines)
+    except (ValueError, TypeError) as e:
+        print(
+            f"Failed to parse primer scheme BED file '{args.bedfile}': {e}",
+            file=sys.stderr,
+        )
+        raise SystemExit(3)
+
     primer_map = defaultdict(dict)
 
-    # Build primer map: {PoolName: {pos: Primer_ID}}
-    for p in bed:
-        for n in range(p['start'], p['end'] + 1):
-            primer_map[p['PoolName']][n] = p['Primer_ID']
+    for p in scheme.bedlines:
+        for n in range(p.start, p.end + 1):
+            primer_map[p.pool][n] = p.primername
 
-    # Parse input VCF list (format: POOL:/path/to/file.vcf)
-    first_vcf = None
+    template_header = None
+
     pool_map = {}
     for param in args.vcflist:
-        pool_name, file_name = param.split(":")
+        pool_name, file_name = param.split(":", 1)
         pool_map[file_name] = pool_name
-        if not first_vcf:
-            first_vcf = file_name
+        if not template_header:
+            if _has_variants(file_name):
+                with pysam.VariantFile(file_name) as vcf_reader:
+                    template_header = vcf_reader.header.copy()
+            else:
+                print(
+                    f"Not using {file_name} as VCF template since it has no variants",
+                    file=sys.stderr,
+                )
 
-    # Open first VCF and declare new INFO field
-    first_reader = VCF(first_vcf)
-    first_reader.add_info_to_header({
-        'ID': 'Pool',
-        'Description': 'The pool name',
-        'Type': 'String',
-        'Number': '1'
-    })
+    if template_header is None:
+        # All input VCFs were empty — grab the header from the first file.
+        first_file = next(iter(pool_map))
+        with pysam.VariantFile(first_file) as vcf_reader:
+            template_header = vcf_reader.header.copy()
 
-    writer = Writer(args.prefix + '.merged.vcf', first_reader)
-    writer_primers = Writer(args.prefix + '.primers.vcf', first_reader)
+    template_header.info.add("Pool", 1, "String", "The pool name")
 
-    # Collect variants with pool info
+    vcf_writer = pysam.VariantFile(
+        f"{args.prefix}.merged.vcf", "w", header=template_header
+    )
+    vcf_writer_primers = pysam.VariantFile(
+        f"{args.prefix}.primers.vcf", "w", header=template_header
+    )
+
     variants = []
     for file_name, pool_name in pool_map.items():
-        reader = VCF(file_name)
-        for v in reader:
-            # Cannot set v.INFO["Pool"] directly, so store externally
-            variants.append((v, pool_name))
-        reader.close()
+        if not _has_variants(file_name):
+            print(f"Skipping {file_name} as it has no variants", file=sys.stderr)
+            continue
 
-    # Sort variants
-    variants.sort(key=lambda r: (r[0].CHROM, r[0].POS))
+        with pysam.VariantFile(file_name) as vcf_reader:
+            vcf_reader.header.info.add("Pool", 1, "String", "The pool name")
+            for v in vcf_reader:
+                v.info["Pool"] = pool_name
+                variants.append(v.copy())
 
-    # Write to correct output
-    for v, pool in variants:
-        pos = v.POS
-        if pool in primer_map and pos in primer_map[pool]:
-            writer_primers.write_record(v)
-            print(f"found primer binding site mismatch: {primer_map[pool][pos]}", file=sys.stderr)
+    variants.sort(key=lambda v: (v.chrom, v.pos))
+
+    for v in variants:
+        if v.pos in primer_map[v.info["Pool"]]:
+            vcf_writer_primers.write(v)
+            print(
+                "found primer binding site mismatch: %s"
+                % (primer_map[v.info["Pool"]][v.pos]),
+                file=sys.stderr,
+            )
         else:
-            writer.write_record(v)
-
-    writer.close()
-    writer_primers.close()
+            vcf_writer.write(v)
 
 
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description='Merge VCFs and flag variants at primer sites.')
-    parser.add_argument('prefix', help='Output file prefix')
-    parser.add_argument('bedfile', help='Primer BED file')
-    parser.add_argument('vcflist', nargs='+', help='VCFs to merge, format: POOL:/path/to/file.vcf')
+    parser = argparse.ArgumentParser(
+        description="Trim alignments from an amplicon scheme."
+    )
+    parser.add_argument("prefix")
+    parser.add_argument("bedfile")
+    parser.add_argument("vcflist", nargs="+")
 
     args = parser.parse_args()
     vcf_merge(args)
@@ -74,4 +104,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

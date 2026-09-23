@@ -41,7 +41,6 @@ process MAKE_DEPTH_MASK {
 	(
 		python ${make_depth_mask} \
 		--depth ${params.mask_depth} \
-		--store-rg-depths \
 		${params.primer_schema}/${scheme}/${version}/${scheme}.reference.fasta \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.primertrimmed.rg.sorted.bam \
 		${currDir}/${params.output_dir}/medaka/${params.run_name}_${sampleId}.coverage_mask.txt ) || echo "make-depth-mask" "${sampleId}" >> ${currDir}/${params.output_dir}/medaka/failed_samples.txt

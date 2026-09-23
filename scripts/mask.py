@@ -1,47 +1,62 @@
-#!/usr/bin/env python
+#source: https://github.com/artic-network/fieldbioinformatics/blob/master/artic/mask.py
 
 from Bio import SeqIO
-import sys
-from cyvcf2 import VCF
-import pandas as pd
+import pysam
 import argparse
+import csv
+
 
 def read_3col_bed(fn):
-    # Read the primer scheme into a pandas DataFrame
-    bedfile = pd.read_csv(fn, sep='\t', header=None,
-                          names=['chrom', 'start', 'end'],
-                          dtype={'chrom': str, 'start': int, 'end': int},
-                          usecols=(0, 1, 2),
-                          skiprows=0)
-    return bedfile
+    # read the primer scheme into a pandas dataframe and run type, length and null checks
+    with open(fn, "rt") as f:
+        reader = csv.DictReader(f, fieldnames=["chrom", "start", "end"], delimiter="\t")
+
+        bedlines = []
+        for row in reader:
+            try:
+                row["start"] = int(row["start"])
+                row["end"] = int(row["end"])
+            except ValueError:
+                raise ValueError(
+                    "The depth mask bedfile appears to be malformed, the start or end position cannot be converted to an integer"
+                )
+            bedlines.append(row)
+
+    return bedlines
+
 
 def go(args):
-    seqs = {rec.id: rec for rec in SeqIO.parse(open(args.reference), "fasta")}
-    cons = {k: list(seqs[k].seq) for k in seqs}
+    seqs = dict([(rec.id, rec) for rec in SeqIO.parse(open(args.reference), "fasta")])
+    cons = {}
+    for k in seqs.keys():
+        cons[k] = list(seqs[k].seq)
 
     bedfile = read_3col_bed(args.maskfile)
-    for _, region in bedfile.iterrows():
-        for n in range(region['start'], region['end']):
-            cons[region['chrom']][n] = 'N'
+    for bedline in bedfile:
+        for n in range(bedline["start"], bedline["end"]):
+            cons[bedline["chrom"]][n] = "N"
 
-    for record in VCF(args.maskvcf):
-        for n in range(0, len(record.REF)):
-            cons[record.CHROM][record.POS - 1 + n] = 'N'
+    with pysam.VariantFile(args.maskvcf) as vcf_reader:
+        for record in vcf_reader:
+            for n in range(0, len(record.ref)):
+                cons[record.chrom][(record.pos - 1) + n] = "N"
 
-    with open(args.output, 'w') as fh:
-        for k in seqs:
-            fh.write(f">{k}\n")
-            fh.write("".join(cons[k]) + '\n')
+    fh = open(args.output, "w")
+    for k in seqs.keys():
+        fh.write(">%s\n" % (k))
+        fh.write(("".join(cons[k])) + "\n")
+    fh.close()
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('reference')
-    parser.add_argument('maskfile')
-    parser.add_argument('maskvcf')
-    parser.add_argument('output')
+    parser.add_argument("reference")
+    parser.add_argument("maskfile")
+    parser.add_argument("maskvcf")
+    parser.add_argument("output")
     args = parser.parse_args()
     go(args)
 
+
 if __name__ == "__main__":
     main()
-

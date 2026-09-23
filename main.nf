@@ -30,21 +30,19 @@ include { DORADO_BARCODER	} from './modules/dorado_barcoder.nf'
 include { PLEX_FQ_FILES	} from './modules/plex_fq_files.nf'
 include { PLEX_DIRS	} from './modules/plex_dirs.nf'
 include { MINIMAP2	} from './modules/minimap2.nf'
-include { ALIGN_TRIM_1	} from './modules/align_trim-1.nf'
-include { ALIGN_TRIM_2	} from './modules/align_trim-2.nf'
-include { MEDAKA_1	} from './modules/medaka-1.nf'
-include { MEDAKA_2	} from './modules/medaka-2.nf'
-include { MEDAKA_SNP_1	} from './modules/medaka_snp-1.nf'
-include { MEDAKA_SNP_2	} from './modules/medaka_snp-2.nf'
+include { ALIGN_TRIM	} from './modules/align_trim.nf'
+include { SPLIT_UNMATCHED	} from './modules/split_unmatched.nf'
+include { CLAIR3	} from './modules/clair-1.nf'
+include { CLAIR3_2	} from './modules/clair-2.nf'
+include { CLAIR3_UNMATCHED	} from './modules/clair_unmatched.nf'
 include	{ VCF_MERGE	} from './modules/vcf_merge.nf'
-include { LONGSHOT	} from './modules/longshot.nf'
 include	{ VCF_FILTER	} from './modules/vcf_filter.nf'
+include { COMPRESS_AND_INDEX_VCF	} from './modules/compress_and_index_vcf.nf'
 include { MAKE_DEPTH_MASK	} from './modules/make_depth_mask.nf'
 include { MASK	} from './modules/mask.nf'
+include { BCFTOOLS_NORM	} from './modules/bcftools_norm.nf'
 include	{ BCFTOOLS_CONSENSUS	} from './modules/bcftools_consensus.nf'
 include { FASTA_HEADER	} from './modules/fasta_header.nf'
-include	{ CONCAT_FOR_MUSCLE	} from './modules/concat_for_muscle.nf'
-include	{ MUSCLE	} from './modules/muscle.nf'
 include { CONCAT	} from './modules/concat.nf'
 include { MAFFT	} from './modules/mafft.nf'
 include	{ SUMMARY_STATS } from './modules/summary_stats.nf'
@@ -136,81 +134,52 @@ rawfile_dir = "${params.rawfile_dir}"
 
 // make the workflow check for basecaller, exit otherwise
 //__________________________________________________________________________________________
+// shared steps from demultiplexed fastq to consensus, alignment and report
+workflow CONSENSUS {
+	take:
+	fastq_dir
+	samples
+
+	main:
+	MINIMAP2(input_dir=fastq_dir.collect(), samples)
+	ALIGN_TRIM(input_bam=MINIMAP2.out.sorted_bam.collect(), samples)
+	SPLIT_UNMATCHED(input_bam=ALIGN_TRIM.out.trimmed_bam.collect(), samples)
+	CLAIR3(input_bam=ALIGN_TRIM.out.trimmed_bam.collect(), samples)
+	CLAIR3_2(input_bam=ALIGN_TRIM.out.trimmed_bam.collect(), samples)
+	CLAIR3_UNMATCHED(input_bam=SPLIT_UNMATCHED.out.unmatched_bam.collect(), samples)
+	VCF_MERGE(input_vcf=CLAIR3.out.vcf.mix(CLAIR3_2.out.vcf, CLAIR3_UNMATCHED.out.vcf).collect(), samples)
+	VCF_FILTER(input_vcf=VCF_MERGE.out.vcf.collect(), samples)
+	COMPRESS_AND_INDEX_VCF(input_vcf=VCF_FILTER.out.pass_vcf.collect(), samples)
+	MAKE_DEPTH_MASK(input_vcf=VCF_FILTER.out.pass_vcf.collect(), samples)
+	MASK(input_vcf=MAKE_DEPTH_MASK.out.coverage_mask.collect(), samples)
+	BCFTOOLS_NORM(input_vcf=MASK.out.preconsensus.mix(COMPRESS_AND_INDEX_VCF.out.vcf_gz).collect(), samples)
+	BCFTOOLS_CONSENSUS(input_vcf=BCFTOOLS_NORM.out.normalised_vcf.collect(), samples)
+	FASTA_HEADER(input_vcf=BCFTOOLS_CONSENSUS.out.consensus_fa.collect(), samples)
+	CONCAT(input_fasta=FASTA_HEADER.out.fasta.collect())
+	MAFFT(concat_fa=CONCAT.out.genome_fa.collect())
+	SUMMARY_STATS(item=MAFFT.out.mafft_fa.collect())
+	REPORT(summary_file=SUMMARY_STATS.out.summary)
+}
+
 workflow
 {
+	// only the route to demultiplexed fastq differs between input types
 	if (params.rawfile_type == "fastq") {
 		PLEX_DIRS(input_dir=rawfile_dir, fq_channel)
-		MINIMAP2(input_dir=PLEX_DIRS.out.collect(), fq_channel)
-		ALIGN_TRIM_1(input_bam=MINIMAP2.out.sorted_bam.collect(), fq_channel)
-		ALIGN_TRIM_2(input_bam=ALIGN_TRIM_1.out.trimmed_bam.collect(), fq_channel)
-		MEDAKA_1(input_bam=ALIGN_TRIM_2.out.primertrimmed_bam.collect(), fq_channel)
-		MEDAKA_2(input_hdf=MEDAKA_1.out.hdf.collect(), fq_channel)
-		MEDAKA_SNP_1(input_hdf=MEDAKA_2.out.hdf.collect(), fq_channel)
-		MEDAKA_SNP_2(input_hdf=MEDAKA_SNP_1.out.vcf.collect(), fq_channel)
-		VCF_MERGE(input_vcf=MEDAKA_SNP_2.out.vcf.collect(), fq_channel)
-		LONGSHOT(input_vcf=VCF_MERGE.out.vcf.collect(), fq_channel)
-		VCF_FILTER(input_vcf=LONGSHOT.out.vcf.collect(), fq_channel)
-		MAKE_DEPTH_MASK(input_vcf=VCF_FILTER.out.pass_vcf.collect(), fq_channel)
-		MASK(input_vcf=MAKE_DEPTH_MASK.out.coverage_mask.collect(), fq_channel)
-		BCFTOOLS_CONSENSUS(input_vcf=MASK.out.preconsensus.collect(), fq_channel)
-		FASTA_HEADER(input_vcf=BCFTOOLS_CONSENSUS.out.consensus_fa.collect(), fq_channel)
-		CONCAT_FOR_MUSCLE(input_vcf=FASTA_HEADER.out.fasta.collect(), fq_channel)
-		MUSCLE(input_vcf=CONCAT_FOR_MUSCLE.out.muscle_fa.collect(), fq_channel)
-		CONCAT(input_fasta=MUSCLE.out.muscle_op_fasta.collect())
-		MAFFT(concat_fa=CONCAT.out.genome_fa.collect())
-		SUMMARY_STATS(item=MAFFT.out.mafft_fa.collect())
-		REPORT(summary_file=SUMMARY_STATS.out.summary)
+		fastq_dir = PLEX_DIRS.out
+	}
+	else if (params.basecaller == "Dorado") {
+		DORADO_BASECALLER(fast5_or_pod5_dir="${params.rawfile_dir}")
+		DORADO_BARCODER(fastq_file=DORADO_BASECALLER.out)
+		PLEX_FQ_FILES(DORADO_BARCODER.out, fq_channel)
+		fastq_dir = PLEX_FQ_FILES.out
 	}
 	else {
-		if (params.basecaller == "Dorado") {
-			DORADO_BASECALLER(fast5_or_pod5_dir="${params.rawfile_dir}")
-			DORADO_BARCODER(fastq_file=DORADO_BASECALLER.out)
-			PLEX_FQ_FILES(DORADO_BARCODER.out, fq_channel)
-			MINIMAP2(input_dir=PLEX_FQ_FILES.out.collect(), fq_channel)
-			ALIGN_TRIM_1(input_bam=MINIMAP2.out.sorted_bam.collect(), fq_channel)
-			ALIGN_TRIM_2(input_bam=ALIGN_TRIM_1.out.trimmed_bam.collect(), fq_channel)
-			MEDAKA_1(input_bam=ALIGN_TRIM_2.out.primertrimmed_bam.collect(), fq_channel)
-			MEDAKA_2(input_hdf=MEDAKA_1.out.hdf.collect(), fq_channel)
-			MEDAKA_SNP_1(input_hdf=MEDAKA_2.out.hdf.collect(), fq_channel)
-			MEDAKA_SNP_2(input_hdf=MEDAKA_SNP_1.out.vcf.collect(), fq_channel)
-			VCF_MERGE(input_vcf=MEDAKA_SNP_2.out.vcf.collect(), fq_channel)
-			LONGSHOT(input_vcf=VCF_MERGE.out.vcf.collect(), fq_channel)
-			VCF_FILTER(input_vcf=LONGSHOT.out.vcf.collect(), fq_channel)
-			MAKE_DEPTH_MASK(input_vcf=VCF_FILTER.out.pass_vcf.collect(), fq_channel)
-			MASK(input_vcf=MAKE_DEPTH_MASK.out.coverage_mask.collect(), fq_channel)
-			BCFTOOLS_CONSENSUS(input_vcf=MASK.out.preconsensus.collect(), fq_channel)
-			FASTA_HEADER(input_vcf=BCFTOOLS_CONSENSUS.out.consensus_fa.collect(), fq_channel)
-			CONCAT_FOR_MUSCLE(input_vcf=FASTA_HEADER.out.fasta.collect(), fq_channel)
-			MUSCLE(input_vcf=CONCAT_FOR_MUSCLE.out.muscle_fa.collect(), fq_channel)
-			CONCAT(input_fasta=MUSCLE.out.muscle_op_fasta.collect())
-			MAFFT(concat_fa=CONCAT.out.genome_fa.collect())
-			SUMMARY_STATS(item=MAFFT.out.mafft_fa.collect())
-			REPORT(summary_file=SUMMARY_STATS.out.summary)
-		}
-		else {
-			GUPPY_BASECALLER(fast5_or_pod5_dir="${params.rawfile_dir}")
-			GUPPY_BARCODER(fastq_file=GUPPY_BASECALLER.out)
-			PLEX_DIRS(input_dir=GUPPY_BARCODER.out, fq_channel)
-			MINIMAP2(input_dir=PLEX_DIRS.out.collect(), fq_channel)
-			ALIGN_TRIM_1(input_bam=MINIMAP2.out.sorted_bam.collect(), fq_channel)
-			ALIGN_TRIM_2(input_bam=ALIGN_TRIM_1.out.trimmed_bam.collect(), fq_channel)
-			MEDAKA_1(input_bam=ALIGN_TRIM_2.out.primertrimmed_bam.collect(), fq_channel)
-			MEDAKA_2(input_hdf=MEDAKA_1.out.hdf.collect(), fq_channel)
-			MEDAKA_SNP_1(input_hdf=MEDAKA_2.out.hdf.collect(), fq_channel)
-			MEDAKA_SNP_2(input_hdf=MEDAKA_SNP_1.out.vcf.collect(), fq_channel)
-			VCF_MERGE(input_vcf=MEDAKA_SNP_2.out.vcf.collect(), fq_channel)
-			LONGSHOT(input_vcf=VCF_MERGE.out.vcf.collect(), fq_channel)
-			VCF_FILTER(input_vcf=LONGSHOT.out.vcf.collect(), fq_channel)
-			MAKE_DEPTH_MASK(input_vcf=VCF_FILTER.out.pass_vcf.collect(), fq_channel)
-			MASK(input_vcf=MAKE_DEPTH_MASK.out.coverage_mask.collect(), fq_channel)
-			BCFTOOLS_CONSENSUS(input_vcf=MASK.out.preconsensus.collect(), fq_channel)
-			FASTA_HEADER(input_vcf=BCFTOOLS_CONSENSUS.out.consensus_fa.collect(), fq_channel)
-			CONCAT_FOR_MUSCLE(input_vcf=FASTA_HEADER.out.fasta.collect(), fq_channel)
-			MUSCLE(input_vcf=CONCAT_FOR_MUSCLE.out.muscle_fa.collect(), fq_channel)
-			CONCAT(input_fasta=MUSCLE.out.muscle_op_fasta.collect())
-			MAFFT(concat_fa=CONCAT.out.genome_fa.collect())
-			SUMMARY_STATS(item=MAFFT.out.mafft_fa.collect())
-			REPORT(summary_file=SUMMARY_STATS.out.summary)
-			}
+		GUPPY_BASECALLER(fast5_or_pod5_dir="${params.rawfile_dir}")
+		GUPPY_BARCODER(fastq_file=GUPPY_BASECALLER.out)
+		PLEX_DIRS(input_dir=GUPPY_BARCODER.out, fq_channel)
+		fastq_dir = PLEX_DIRS.out
 	}
+
+	CONSENSUS(fastq_dir, fq_channel)
 }
