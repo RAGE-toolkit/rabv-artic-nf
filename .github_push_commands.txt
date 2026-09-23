@@ -1,0 +1,51 @@
+# rabv-artic-nf v2.0.0 - push commands
+# Run from the project root, one block at a time.
+
+# 1. Check what is staged
+git status
+
+# 2. Commit
+git commit -F - <<'EOF'
+Migrate consensus calling to fieldbioinformatics v1.11.2 (Clair3 backend)
+
+Update the pipeline to follow the fieldbioinformatics v1.11.2 workflow,
+replacing medaka/longshot variant calling with Clair3. Validated on S4-D0:
+the consensus is identical (base for base) to fieldbioinformatics output.
+
+Variant calling
+- Add Clair3 per-pool calling (clair-1, clair-2) plus calling on
+  unmatched reads (split_unmatched, clair_unmatched)
+- Add compress_and_index_vcf and bcftools_norm steps before consensus
+- Update vcf_merge, vcf_filter, make_depth_mask, mask and align_trim
+  scripts to the fieldbioinformatics v1.11.2 versions
+- Add artic_fasta_header.py and plex.py
+- Move medaka, longshot, muscle and old align_trim modules/scripts to
+  deprecated/
+
+Workflow
+- Refactor main.nf: shared steps now live in a single CONSENSUS
+  sub-workflow; fastq/Dorado/Guppy branches only differ in demultiplexing
+- Fix Dorado/Guppy branches calling undefined ALIGN_TRIM_1 and MUSCLE
+
+Configuration
+- Expose align_trim (normalise, primer_match_threshold, min_mapq) and
+  vcf_filter thresholds as params; vcf_filter --min-depth now follows
+  mask_depth
+- Select the Docker image by host architecture (arm64/amd64)
+
+Other
+- Dockerfile: multi-arch build (arm64/amd64) with Miniforge env for
+  Clair3 2.0.2, align_trim and primalbedtools
+- Fix rabvSEasia V1 scheme.bed reference names
+- Replace test fastq with S4-D0_barcode09
+EOF
+
+# 3. Push to GitHub
+git push origin main
+
+# 4. Tag and create the release (uses release_notes.md)
+gh release create v2.0.0 --title "v2.0.0 – fieldbioinformatics v1.11.2 / Clair3" --notes-file release_notes.md
+
+# 5. Push Docker images to Docker Hub (needs: docker login)
+docker push rage2025/artic-nf-amd64:v2.0
+docker push rage2025/artic-nf-arm64:v2.0    # from the Mac where it was built
