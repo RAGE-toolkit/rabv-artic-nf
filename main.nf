@@ -132,9 +132,6 @@ else {
 
 rawfile_dir = "${params.rawfile_dir}"
 
-// make the workflow check for basecaller, exit otherwise
-//__________________________________________________________________________________________
-// shared steps from demultiplexed fastq to consensus, alignment and report
 workflow CONSENSUS {
 	take:
 	fastq_dir
@@ -163,7 +160,6 @@ workflow CONSENSUS {
 
 workflow
 {
-	// only the route to demultiplexed fastq differs between input types
 	if (params.rawfile_type == "fastq") {
 		PLEX_DIRS(input_dir=rawfile_dir, fq_channel)
 		fastq_dir = PLEX_DIRS.out
