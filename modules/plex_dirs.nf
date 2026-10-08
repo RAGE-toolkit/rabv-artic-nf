@@ -25,8 +25,9 @@ process PLEX_DIRS {
 	python $script_path \
 		--skip-quality-check \
 		--min-length ${params.seq_len} \
-		--max-length ${params.seq_max_len} \
 		--directory ${input_dir}/${item} \
 		--output "${projectDir}/${params.fastq_dir}/${sample_id}_${item}${params.fq_extension}"
 	"""
 }
+
+#--max-length ${params.seq_max_len} \
